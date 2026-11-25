@@ -146,6 +146,17 @@ static int mtkboardboot(void)
 static int do_mtkboardboot(cmd_tbl_t *cmdtp, int flag, int argc,
 	char *const argv[])
 {
+#ifdef CONFIG_JDCLOUD_TF_BOOT
+    /* TF boot is optional; missing/invalid media falls back to SPI recovery. */
+    env_set_hex("loadaddr", CONFIG_SYS_LOAD_ADDR);
+    if (!run_command("mmc dev 0", 0) &&
+        !run_command("mmc rescan", 0) &&
+        !run_command("fatload mmc 0:1 ${loadaddr} /boot/uImage 2000000", 0) &&
+        !run_command("iminfo ${loadaddr}", 0)) {
+        run_command("bootm ${loadaddr}", 0);
+    }
+    printf("TF boot unavailable or returned; falling back to SPI firmware\n");
+#endif
 	mtkboardboot();
 
 #ifndef CONFIG_WEBUI_FAILSAFE_ON_AUTOBOOT_FAIL

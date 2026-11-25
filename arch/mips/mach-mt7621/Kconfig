@@ -106,3 +106,10 @@ source "board/ralink/mt7621_nand_rfb/Kconfig"
 
 
 endmenu
+
+config JDCLOUD_TF_BOOT
+    bool "Experimental JDCloud RE-CP-02 TF boot before SPI fallback"
+    depends on BOARD_MT7621_NOR_TEMPLATE
+    help
+      Load /boot/uImage from FAT partition 1 of MMC device 0.
+      The kernel must include its own TF rootfs/overlay configuration.

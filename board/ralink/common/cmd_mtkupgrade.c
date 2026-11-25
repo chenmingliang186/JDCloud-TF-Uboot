@@ -693,6 +693,24 @@ static int _write_firmware(void *flash, size_t data_addr, uint32_t data_size,
 		return CMD_RET_FAILURE;
 	}
 
+#ifdef CONFIG_JDCLOUD_TF_BOOT
+    /* Never let a saved mtdparts value redirect a web upload into Factory. */
+    if (part_off != 0x90000 || part_size != 0xf70000) {
+        printf("RE-CP-02 firmware partition geometry mismatch\n");
+        return CMD_RET_FAILURE;
+    }
+    if (data_size < sizeof(image_header_t) ||
+        !image_check_magic((image_header_t *)data_addr) ||
+        !image_check_hcrc((image_header_t *)data_addr) ||
+        image_get_data_size((image_header_t *)data_addr) >
+            data_size - sizeof(image_header_t) ||
+        image_get_arch((image_header_t *)data_addr) != IH_ARCH_MIPS ||
+        !image_check_dcrc((image_header_t *)data_addr)) {
+        printf("Expected a complete MIPS legacy uImage firmware\n");
+        return CMD_RET_FAILURE;
+    }
+#endif
+
 	tmp = part_off;
 
 	if (do_div(tmp, mtk_board_get_flash_erase_size(flash))) {
@@ -712,6 +730,9 @@ static int _write_firmware(void *flash, size_t data_addr, uint32_t data_size,
 	printf("\n");
 
 	erase_size = ALIGN(data_size, mtk_board_get_flash_erase_size(flash));
+    if (erase_size < data_size || erase_size > part_size)
+        return CMD_RET_FAILURE;
+
 
 	printf("Erasing from 0x%llx to 0x%llx, size 0x%x ... ", part_off,
 	       part_off + erase_size - 1, erase_size);

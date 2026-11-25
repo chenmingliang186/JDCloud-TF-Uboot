@@ -64,7 +64,7 @@ on:
         description: 'Use Old DDR Timing Parameters'
         required: true
         type: boolean
-        default: 'false'
+        default: false
       baudrate:
         description: 'Baud Rate'
         required: true
@@ -82,26 +82,21 @@ jobs:
 
     steps:
       - name: Checkout master directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: uboot-mt7621
 
       - name: Install essential packages
         run: |
           sudo apt-get update
-          sudo apt-get install swig
-          echo 'switch to python2 as default'
-          sudo rm /usr/bin/python
-          wget https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tar.xz
-          tar -xJf Python-2.7.18.tar.xz
-          cd Python-2.7.18
-          ./configure && sudo make && sudo make install
-          sudo ln -s /usr/bin/python2 /usr/bin/python
+          sudo apt-get install -y build-essential bison flex bc libssl-dev python3
 
       - name: Download OpenWrt toolchain
         run: |
-          wget -O - https://github.com/DragonBluep/uboot-mt7621/releases/download/20230517/openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz \
-            | tar --xz -xf -
+          curl --fail --location --retry 3 -o toolchain.tar.xz \
+            https://github.com/DragonBluep/uboot-mt7621/releases/download/20230517/openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          echo 'eea24cfa6b586fab28994bc4b9f485401dd75fde2707febf6ec823ab4e68ccf4  toolchain.tar.xz' | sha256sum -c -
+          tar -xJf toolchain.tar.xz
 
       - name: Set old DDR timing parameters
         if:  ${{ inputs.oldparam }}
@@ -110,12 +105,23 @@ jobs:
 
       - name: Compile
         working-directory: uboot-mt7621
+        env:
+          FLASH: ${{ inputs.flash }}
+          MTDPARTS: ${{ inputs.mtdparts }}
+          KERNEL_OFFSET: ${{ inputs.kernel_offset }}
+          RESET_PIN: ${{ inputs.reset_pin }}
+          SYSLED_PIN: ${{ inputs.sysled_pin }}
+          CPUFREQ: ${{ inputs.cpufreq }}
+          RAMFREQ: ${{ inputs.ramfreq }}
+          DDRPARAM: ${{ inputs.ddrparam }}
+          BAUDRATE: ${{ inputs.baudrate }}
         run: |
-          ./customize.sh '${{ inputs.flash }}' '${{ inputs.mtdparts }}' '${{ inputs.kernel_offset }}' '${{ inputs.reset_pin }}' \
-            '${{ inputs.sysled_pin }}' '${{ inputs.cpufreq }}' '${{ inputs.ramfreq }}' '${{ inputs.ddrparam }}' '${{ inputs.baudrate }}'
+          bash ./customize.sh "$FLASH" "$MTDPARTS" "$KERNEL_OFFSET" "$RESET_PIN" \
+            "$SYSLED_PIN" "$CPUFREQ" "$RAMFREQ" "$DDRPARAM" "$BAUDRATE"
+
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: u-boot
           path: "uboot-mt7621/archive/"

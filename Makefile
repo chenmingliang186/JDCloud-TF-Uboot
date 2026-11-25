@@ -1346,9 +1346,14 @@ else
 MT7621_SPL_BINLOAD := spl/u-boot-mt7621-nand-spl.img
 endif
 
+# Equivalent to mt7621-u-boot.dtsi: SPL padded with 0xff, then payload.
+quiet_cmd_mt7621_pack = PACK    $@
+cmd_mt7621_pack = $(PYTHON3) $(srctree)/tools/mt7621_pack.py --output $@ \
+	$(if $(CONFIG_SPL),--spl $(MT7621_SPL_BINLOAD) --align $(CONFIG_SPL_ALIGN_TO) --payload $(SPL_PAYLOAD),--payload u-boot.bin)
+
 u-boot-mt7621.bin: $(if $(CONFIG_SPL),$(MT7621_SPL_BINLOAD) $(SPL_PAYLOAD)) \
-		   u-boot.bin u-boot.dtb FORCE
-	$(call if_changed,binman)
+		   u-boot.bin tools/mt7621_pack.py FORCE
+	$(call if_changed,mt7621_pack)
 
 quiet_cmd_mtk_spl_patch = PATCH   $@
 cmd_mtk_spl_patch = cp $< $@ && \

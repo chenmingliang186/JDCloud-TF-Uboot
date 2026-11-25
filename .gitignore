@@ -88,3 +88,10 @@ GTAGS
 *.orig
 *~
 \#*#
+
+# Generated MT7621 build products
+/archive/
+/artifacts/
+/configs/mt7621_build_defconfig
+
+__pycache__/
