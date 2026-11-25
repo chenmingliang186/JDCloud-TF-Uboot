@@ -1,3 +1,7 @@
+> RE-CP-02 experimental work: see [status, limitations and build instructions](RE-CP-02-STATUS.md).
+> TF formatting, complete KWRT installation and TF upgrades are not implemented.
+> Every hardware function remains untested.
+
 # MediaTek MT7621 U-Boot with Failsafe Mode
 ![Web Recovery Page](WebRecovery.jpg)
 

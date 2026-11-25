@@ -1,12 +1,15 @@
 #!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")"
+if [ "$#" -ne 9 ]; then echo "Expected 9 board parameters" >&2; exit 2; fi
 
 # toolchain path
-Toolchain=$(cd ../openwrt*/toolchain-mipsel*/bin; pwd)'/mipsel-openwrt-linux-'
-Staging=${Toolchain%/toolchain-*}
+Toolchain=${CROSS_COMPILE:-$(cd ../openwrt*/toolchain-mipsel*/bin; pwd)'/mipsel-openwrt-linux-'}
+Staging=${STAGING_DIR:-${Toolchain%/toolchain-*}}
 
 echo "CROSS_COMPILE=${Toolchain}"
 echo "STAGING_DIR=${Toolchain%/toolchain-*}"
-cd $(dirname "$0")
+cd "$(dirname "$0")"
 
 # arguments:
 # $1	string: flash type
@@ -32,11 +35,15 @@ if [ "$1" = 'NOR' ]; then
 elif [ "$1" = 'NAND' ]; then
 	cp configs/mt7621_nand_template_defconfig ${DEFCONFIG}
 	echo -e "CONFIG_MTDPARTS_DEFAULT=\"mtdparts=nand0:$2\"" >> ${DEFCONFIG}
-else
+elif [ "$1" = 'NAND-NMBM' ]; then
 	cp configs/mt7621_nmbm_template_defconfig ${DEFCONFIG}
 	echo -e "CONFIG_MTDPARTS_DEFAULT=\"mtdparts=nmbm0:$2\"" >> ${DEFCONFIG}
+else
+    echo "Invalid flash type" >&2; exit 2
 fi
 echo "set partition table: $2"
+# Replace generated GPIO definitions on repeat builds.
+sed -i '/^#ifndef __CONFIG_MT7621_RESET_LED/,$d' include/configs/mt7621-common.h
 
 echo "set kernel offset: $3"
 if [ "$1" = 'NOR' ]; then
@@ -116,10 +123,14 @@ else
 	echo "CONFIG_BAUDRATE=115200" >> ${DEFCONFIG}
 fi
 
+if [ "${BOARD_PROFILE:-}" = "jdcloud-re-cp-02-tf" ]; then
+    cat configs/jdcloud_re_cp_02_tf.fragment >> "${DEFCONFIG}"
+fi
 make mt7621_build_defconfig
-make CROSS_COMPILE=${Toolchain} STAGING_DIR=${Staging}
+make -j"${JOBS:-2}" CROSS_COMPILE="${Toolchain}" STAGING_DIR="${Staging}"
 make savedefconfig
-mkdir archive
+mkdir -p archive
 cat defconfig > archive/mt7621_defconfig
-mv u-boot-mt7621.bin archive/
-mv u-boot.img archive/
+test "$(wc -c < u-boot-mt7621.bin)" -le "${MAX_UBOOT_SIZE:-262144}"
+cp u-boot-mt7621.bin archive/
+cp u-boot.img archive/
