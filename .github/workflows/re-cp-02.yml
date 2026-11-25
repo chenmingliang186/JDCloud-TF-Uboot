@@ -2,7 +2,7 @@ name: RE-CP-02 baseline and experimental TF
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, fix/re-cp-02-tf-bringup]
 permissions:
   contents: read
 jobs:
