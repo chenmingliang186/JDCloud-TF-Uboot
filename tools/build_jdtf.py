@@ -230,6 +230,15 @@ def make_initramfs(root, dest):
         loaded.add(name)
         loading.remove(name)
 
+    # ext4 asks the crypto API for crc32c at runtime; that is not necessarily
+    # recorded as an ELF module dependency. Honor the firmware's early crypto
+    # and checksum module lists before attempting the first ext4 mount.
+    for bootlist in sorted((root/"etc/modules-boot.d").glob("*")):
+        if "crypto" in bootlist.name or "crc" in bootlist.name:
+            for line in bootlist.read_text().splitlines():
+                line = line.split("#", 1)[0].strip()
+                if line and line.split()[0].replace("-", "_") in modules:
+                    module(line.split()[0])
     for name in ["mmc_block", "mtk-sd", "ext4"]:
         module(name)
     (dest/"modules.load").write_text("\n".join(order)+"\n")
