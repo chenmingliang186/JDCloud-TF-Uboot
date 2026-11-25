@@ -6,6 +6,9 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_JDCLOUD_TF_BOOT
+#include <jdtf.h>
+#endif
 #include <command.h>
 #include <console.h>
 #include <cli.h>
@@ -787,6 +790,11 @@ static int _write_firmware(void *flash, size_t data_addr, uint32_t data_size,
 int write_firmware_failsafe(size_t data_addr, uint32_t data_size)
 {
 	void *flash;
+
+#ifdef CONFIG_JDCLOUD_TF_BOOT
+    if (data_size >= 8 && !memcmp((void *)data_addr, JDTF_MAGIC, 8))
+        return jdtf_install((void *)data_addr, data_size);
+#endif
 
 	flash = mtk_board_get_flash_dev();
 
