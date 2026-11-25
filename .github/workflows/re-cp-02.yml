@@ -1,0 +1,43 @@
+name: RE-CP-02 baseline and experimental TF
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        variant: [baseline, tf-experimental]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: uboot-mt7621
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex bc libssl-dev python3
+      - name: Toolchain
+        run: |
+          curl --fail --location --retry 3 -o toolchain.tar.xz https://github.com/DragonBluep/uboot-mt7621/releases/download/20230517/openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          echo 'eea24cfa6b586fab28994bc4b9f485401dd75fde2707febf6ec823ab4e68ccf4  toolchain.tar.xz' | sha256sum -c -
+          tar -xJf toolchain.tar.xz
+      - name: Build and check
+        working-directory: uboot-mt7621
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests/host -v
+          if [ "$VARIANT" = baseline ]; then
+            bash ./customize.sh NOR '256k(u-boot),64k(u-boot-env),256k(factory),-(firmware)' 0x90000 18 7 880 1200 DDR3-256MiB 115200
+          else
+            bash ./build-re-cp-02.sh
+          fi
+          test "$(wc -c < archive/u-boot-mt7621.bin)" -le 262144
+          sha256sum archive/u-boot-mt7621.bin > archive/SHA256SUMS
+      - uses: actions/upload-artifact@v5
+        with:
+          name: re-cp-02-${{ matrix.variant }}-UNTESTED
+          path: uboot-mt7621/archive/
+          if-no-files-found: error
