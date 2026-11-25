@@ -1,6 +1,6 @@
-> RE-CP-02 experimental work: see [status, limitations and build instructions](RE-CP-02-STATUS.md).
-> TF formatting, complete KWRT installation and TF upgrades are not implemented.
-> Every hardware function remains untested.
+> RE-CP-02 integrated experimental TF installer: see [scope, installation and upgrade instructions](RE-CP-02-STATUS.md).
+> Upload the converted `.jdtf.bin` package for TF installation. First install erases the TF card.
+> All hardware behavior and DDR parameters remain unverified.
 
 # MediaTek MT7621 U-Boot with Failsafe Mode
 ![Web Recovery Page](WebRecovery.jpg)

@@ -1,107 +1,115 @@
-# JDCloud RE-CP-02 bring-up status
+# JDCloud RE-CP-02: integrated experimental TF installation
 
-This is a **partial implementation**, not a finished TF installer. All hardware
-behavior is UNTESTED. No image has been flashed by this work.
+**All hardware behavior is UNTESTED.** This branch implements the software path
+for TF installation and upgrading. It is not evidence of a successful hardware
+boot or verified electrical/DDR compatibility.
 
-## Delivered
+## Deliverables and supported image format
 
-- Local cross-compilation of the SPI baseline and experimental TF variant.
-- Python 3 MT7621 packer replaces the old Python 2 binman/pylibfdt path for
-  MT7621 only. Layout remains SPL, 0xff alignment padding, LZMA U-Boot payload.
-- CI dependencies, fixed toolchain SHA-256, fail-fast builds, quoted workflow
-  inputs, repeatable GPIO generation, and a 262144-byte final BIN size gate.
-- Dedicated board build and CI matrix; CI has **not** been run on GitHub.
-- Experimental SD/MMC pinmux and driver, FAT partition parsing, and
-  `/boot/uImage` loading from MMC 0:1 before the existing SPI boot path.
-- Existing reset-button web recovery and TFTP initramfs recovery code retained.
-- TF variant SPI firmware writes enforce the fixed RE-CP-02 firmware region;
-  uploads require a complete MIPS legacy uImage with valid header/data CRC.
-  CRC is an integrity check, not signature or board-model authentication.
+- U-Boot still resides in SPI, within the 256 KiB U-Boot partition.
+- The new U-Boot accepts a converted `*.jdtf.bin` KWRT TF package through its
+  existing web recovery page. The supplied KWRT image has already been converted.
+- An ordinary, unconverted KWRT sysupgrade BIN uploaded to U-Boot still goes to
+  SPI; it does **not** automatically become a TF-installed image.
+- Future KWRT releases must be converted with `tools/build_jdtf.py` before TF
+  installation or LuCI/sysupgrade. No force override is required for valid JDTF.
+- The converter supports this RE-CP-02 LZMA legacy-uImage + appended-DTB +
+  squashfs family, with matching MMC/ext4 modules and mke2fs in the input image.
+  Other formats are rejected instead of guessing compatibility.
 
-## Board assumptions
+## First installation and storage
 
-Partition map and GPIOs are based on OpenWrt's RE-CP-02 DTS:
-https://github.com/openwrt/openwrt/blob/main/target/linux/ramips/dts/mt7621_jdcloud_re-cp-02.dts
+Uploading JDTF to the web recovery page validates its sizes, board tag and CRCs
+before writing the TF card. First installation **erases the existing TF layout**.
+Only MMC device 0 is supported. Use a card >= 512 MiB with 512-byte sectors.
 
-| Region | Start | Length |
+| TF partition | Start sector | Size | Use |
+| --- | --- | --- | --- |
+| p1 | 2048 | 32 MiB | package header, kernel and matching initramfs |
+| p2 | 67584 | 128 MiB | read-only KWRT squashfs |
+| p3 | 329728 | remaining card | ext4 overlay and persistent data |
+
+The first Linux boot loads the matching MMC/ext4 modules from the external
+initramfs. It formats p3 only when the explicit `JDTF-EMPTY-v1` marker is present,
+mounts the rootfs and overlay, then starts the original KWRT init system.
+A damaged existing overlay without the empty marker is never automatically
+reformatted. `/` uses p3 for writable internal storage; `/overlay/data` is a
+persistent data directory.
+
+Normal boot attempts raw JDTF first, then the earlier FAT `/boot/uImage` path,
+then SPI. Invalid headers/kernel/initramfs return to the SPI path. A hang after
+entering Linux requires the existing reset-button web/TFTP recovery path.
+
+## Upgrade behavior
+
+- Web JDTF upgrade preserves p3. At next boot, configuration under `/etc` and
+  user files under `/root` migrate; old installed software/modules do not carry
+  across kernel versions. `/overlay/data` remains intact.
+- LuCI/sysupgrade accepts a converted JDTF package. It runs from RAM, verifies the
+  exact card layout before touching the overlay, restores the standard selected
+  sysupgrade configuration backup, and writes only the TF kernel/rootfs regions.
+- `sysupgrade -n` starts a fresh software overlay but retains `/overlay/data`.
+- TF boot is invalidated before component writes; the new boot header is
+  committed only after read-back verification. This allows SPI fallback after
+  an interrupted write. Actual power-loss behavior has not been tested.
+- CRC detects corruption, not a malicious signer. This is not secure boot.
+
+## SPI and Factory
+
+The TF installer/upgrader has no SPI/MTD write operations. The original kernel
+DTS is retained except `/chosen` bootargs and external-initrd addresses, so
+Factory calibration continues to be read from the original SPI partition.
+Existing web/TFTP rescue code is retained. Ordinary SPI firmware upload bounds
+remain checked separately.
+
+| SPI region | Start | Length |
 | --- | --- | --- |
 | U-Boot | 0x000000 | 0x040000 |
 | Config | 0x040000 | 0x010000 |
 | Factory | 0x050000 | 0x040000 |
 | firmware | 0x090000 | 0xF70000 |
 
-Reset GPIO 18; blue status LED GPIO 7; serial 115200; CPU 880 MHz.
-**DDR3 256 MiB / 1200 MT/s is an unverified build assumption** and must match
-this physical board before any flashing. The 256 KiB limit alone does not
-establish safe hardware compatibility.
+GPIOs/partition map are based on the OpenWrt RE-CP-02 DTS:
+https://github.com/openwrt/openwrt/blob/main/target/linux/ramips/dts/mt7621_jdcloud_re-cp-02.dts
 
-## Feature matrix
+Reset GPIO 18, blue LED GPIO 7, UART 115200, CPU 880 MHz. The existing build uses
+**DDR3 256 MiB / 1200 MT/s as an unverified assumption**. Confirm the physical
+board's DDR type/capacity/timing before flashing. No bootloader was flashed here.
 
-| Requested function | Current result |
-| --- | --- |
-| Fix current Actions error | Build changes prepared; original log confirms python: not found in pylibfdt; remote rerun pending |
-| Baseline build | Local build completed; BIN supplied |
-| TF startup | Experimental FAT /boot/uImage loader compiled; requires a suitable kernel/rootfs; no hardware test |
-| Web upload KWRT | Existing SPI upload retained, TF variant adds integrity/bounds checks; user's KWRT BIN not tested |
-| Format TF as internal storage | **Not implemented** |
-| Install an ordinary KWRT sysupgrade BIN onto TF | **Not implemented** |
-| Subsequent TF firmware upgrades | **Not implemented** |
-| Rescue and Factory preservation | Existing rescue paths retained; firmware-write bounds checked in TF source; hardware untested |
-| U-Boot <= 256 KiB | Final BIN size checked locally |
+## Building and converting
 
-## Important scope of TF startup
-
-U-Boot itself still boots from SPI flash. It then attempts to load the Linux
-kernel from TF. This is not MT7621 BootROM booting U-Boot directly from TF.
-
-The FAT loader does not alter or format a TF card. A matching initramfs uImage
-can be used for initial bring-up. A regular KWRT sysupgrade BIN copied to
-`/boot/uImage` is not a complete TF-installed system: its rootfs placement,
-MMC kernel driver, command line, overlay mount and sysupgrade logic must agree.
-The 32 MiB load cap and `iminfo` check prevent booting a truncated large uImage.
-If TF probing/loading/checking returns an error, the original SPI path runs.
-A kernel that hangs after bootm cannot be recovered by that software fallback.
-
-## Remaining implementation for the requested complete product
-
-A matching KWRT build must supply an MMC-capable installer/initramfs, a defined
-TF partition layout, rootfs/overlay mounting, and a sysupgrade platform handler.
-Automatic formatting must occur in that installer, with a one-time marker and
-explicit card selection, rather than on every normal boot. Upgrade image
-validation must identify this board/layout before changing storage. Existing
-Factory calibration data must continue to be read from SPI at 0x50000.
-None of that Linux integration is included in these BINs.
-
-## Build
-
-Extract the pinned OpenWrt toolchain beside this repository, as in the workflows.
-Install make, GCC, bison, flex, bc, OpenSSL development headers and Python 3.
-
-Baseline:
+Build U-Boot using the pinned toolchain beside this repository:
 
 ```sh
-./customize.sh NOR '256k(u-boot),64k(u-boot-env),256k(factory),-(firmware)' \
-  0x90000 18 7 880 1200 DDR3-256MiB 115200
+bash build-re-cp-02.sh
 ```
 
-Experimental TF:
+Convert the next matching RE-CP-02 KWRT sysupgrade image on a Linux computer:
 
 ```sh
-./build-re-cp-02.sh
+python3 tools/build_jdtf.py ORIGINAL-KWRT-sysupgrade.bin \
+  --cc /path/to/mipsel-openwrt-linux-gcc \
+  --output KWRT-RE-CP-02.jdtf.bin
 ```
 
-Only `archive/u-boot-mt7621.bin` is the packed flash image. The much larger
-`u-boot.img` is an intermediate, not a 256 KiB flash replacement.
+Host prerequisites: Python 3, squashfs-tools, binutils/readelf, GCC, bison, flex,
+bc, zlib/OpenSSL development headers. The converter never accesses a physical
+disk. Matching modules, executable dependencies and initramfs are taken from
+that exact input firmware.
 
-Recovery code is unchanged: PC 192.168.1.2/24, router 192.168.1.1. Hold Reset
-while powering on, release after 1–6 seconds of blinking for web recovery;
-hold through 6 seconds for TFTP `recovery.bin` initramfs recovery. These timing,
-Ethernet, GPIO and DDR assumptions have not been verified on this hardware.
-Do not use these instructions as evidence that flashing has been validated.
+Only `archive/u-boot-mt7621.bin` is the packed SPI bootloader. The larger
+`u-boot.img` is an intermediate and must not be used as a 256 KiB replacement.
+Never write the JDTF package to the SPI U-Boot/Factory/firmware partitions.
 
-## Repository access
+## Validation and remaining hardware tests
 
-Source was cloned from main commit 636b6e7c0db8a7bf0c5becfbc0e3660be6736ba3.
-Browser login is available; GitHub CLI is not authenticated.
-Changes are being uploaded through GitHub on a dedicated fix branch.
-See the final delivery for remote build results.
+Local cross-compilation, final BIN size gates, image CRC/layout/decompression
+checks, host tests of the actual U-Boot installer with sparse card files, Linux
+writer tests, interrupted-write and overlay-migration tests were performed.
+QEMU user-mode ran the MIPS package verifier, shell syntax checks and mke2fs on
+a regular test file. User-mode execution is **not** whole-router emulation.
+
+Unverified: DDR initialization, MMC pinmux/electrical operation, physical card
+writes, reset/LED/Ethernet behavior, web upload on the router, external-initrd
+handoff, complete Linux boot, Wi-Fi calibration, real LuCI upgrades and real
+power-loss recovery. These must not be reported as hardware-verified features.
