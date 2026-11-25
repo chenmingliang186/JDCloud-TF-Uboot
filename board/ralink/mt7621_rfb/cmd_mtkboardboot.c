@@ -6,6 +6,9 @@
  */
 
 #include <common.h>
+#ifdef CONFIG_JDCLOUD_TF_BOOT
+#include <jdtf.h>
+#endif
 #include <asm/io.h>
 #include <asm/addrspace.h>
 #include <asm/types.h>
@@ -147,6 +150,7 @@ static int do_mtkboardboot(cmd_tbl_t *cmdtp, int flag, int argc,
 	char *const argv[])
 {
 #ifdef CONFIG_JDCLOUD_TF_BOOT
+    jdtf_boot();
     /* TF boot is optional; missing/invalid media falls back to SPI recovery. */
     env_set_hex("loadaddr", CONFIG_SYS_LOAD_ADDR);
     if (!run_command("mmc dev 0", 0) &&
