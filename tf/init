@@ -1,0 +1,35 @@
+#!/bin/sh
+# External initramfs for the exact KWRT kernel/modules in the converted image.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+rescue() { echo "JDTF: $*; SPI recovery remains available after reboot" >/dev/console; exec sh; }
+mount -t devtmpfs devtmpfs /dev || rescue devtmpfs
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t tmpfs tmpfs /tmp
+mkdir -p /lower /overlay /newroot
+while read module; do insmod "$module" || rescue "module $module"; done </modules.load
+n=0
+while [ ! -b /dev/mmcblk0p3 ]; do
+    [ "$n" -lt 20 ] || rescue "TF partitions unavailable"
+    sleep 1; n=$((n + 1))
+done
+mount -t squashfs -o ro /dev/mmcblk0p2 /lower || rescue "rootfs mount"
+if ! mount -t ext4 /dev/mmcblk0p3 /overlay; then
+    marker="$(dd if=/dev/mmcblk0p3 bs=1 count=13 2>/dev/null)"
+    [ "$marker" = JDTF-EMPTY-v1 ] || rescue "overlay is damaged; refusing automatic format"
+    mke2fs -t ext4 -F -L jdtf-overlay /dev/mmcblk0p3 || rescue "first-boot format"
+    mount -t ext4 /dev/mmcblk0p3 /overlay || rescue "new overlay mount"
+fi
+. /overlay.sh
+jdtf_migrate_overlay /lower /overlay || rescue "configuration migration"
+mkdir -p /overlay/upper /overlay/work /overlay/data
+mount -t overlay -o lowerdir=/lower,upperdir=/overlay/upper,workdir=/overlay/work jdtf /newroot || rescue overlay
+mkdir -p /newroot/rom /newroot/overlay /newroot/proc /newroot/sys /newroot/dev /newroot/tmp
+mount --move /lower /newroot/rom || rescue "move lower"
+mount --move /overlay /newroot/overlay || rescue "move overlay"
+mount --move /proc /newroot/proc
+mount --move /sys /newroot/sys
+mount --move /dev /newroot/dev
+mount --move /tmp /newroot/tmp
+exec switch_root /newroot /sbin/init
+rescue switch_root

@@ -2,7 +2,7 @@ name: RE-CP-02 baseline and experimental TF
 on:
   workflow_dispatch:
   push:
-    branches: [main, fix/re-cp-02-tf-bringup]
+    branches: [main, fix/re-cp-02-tf-bringup, feature/re-cp-02-tf-install]
 permissions:
   contents: read
 jobs:
@@ -16,7 +16,7 @@ jobs:
         with:
           path: uboot-mt7621
       - name: Dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex bc libssl-dev python3
+        run: sudo apt-get update && sudo apt-get install -y build-essential bison flex bc libssl-dev zlib1g-dev python3
       - name: Toolchain
         run: |
           curl --fail --location --retry 3 -o toolchain.tar.xz https://github.com/DragonBluep/uboot-mt7621/releases/download/20230517/openwrt-toolchain-ramips-mt7621_gcc-12.3.0_musl.Linux-x86_64.tar.xz
@@ -35,7 +35,7 @@ jobs:
             bash ./build-re-cp-02.sh
           fi
           test "$(wc -c < archive/u-boot-mt7621.bin)" -le 262144
-          sha256sum archive/u-boot-mt7621.bin > archive/SHA256SUMS
+          (cd archive && sha256sum u-boot-mt7621.bin > SHA256SUMS)
       - uses: actions/upload-artifact@v5
         with:
           name: re-cp-02-${{ matrix.variant }}-UNTESTED

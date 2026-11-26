@@ -1,0 +1,6 @@
+#!/bin/sh
+# initramfs already mounted the persistent TF overlay before starting procd.
+if [ -e /etc/jdtf-root ] && grep -q ' / overlay ' /proc/mounts; then
+    exit 0
+fi
+exec /sbin/mount_root.mtd "$@"
